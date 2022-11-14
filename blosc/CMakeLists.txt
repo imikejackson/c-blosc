@@ -141,6 +141,27 @@ if (NOT DEACTIVATE_ZSTD)
 endif (NOT DEACTIVATE_ZSTD)
 
 
+
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
+function(install_with_directory)
+  set(optionsArgs)
+  set(oneValueArgs DESTINATION COMPONENT BASE_DIR)
+  set(multiValueArgs FILES)
+  cmake_parse_arguments(ARGS "${optionsArgs}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
+  foreach(file ${ARGS_FILES})
+      file(RELATIVE_PATH relative_file ${ARGS_BASE_DIR} ${file})
+      get_filename_component(destination_dir ${relative_file} DIRECTORY)
+      install(FILES ${file}
+        DESTINATION ${ARGS_DESTINATION}/${destination_dir}
+        COMPONENT ${ARGS_COMPONENT}
+      )
+  endforeach()
+endfunction()
+
+
 # targets
 if (BUILD_SHARED)
     add_library(blosc_shared SHARED ${SOURCES})
@@ -231,9 +252,61 @@ if(BLOSC_INSTALL)
             DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} COMPONENT DEV)
     if(BUILD_SHARED)
         install(TARGETS blosc_shared
-                LIBRARY COMPONENT LIB
-                ARCHIVE COMPONENT DEV
-                RUNTIME COMPONENT LIB)
+            EXPORT bloscTargets
+        )
+        export(EXPORT bloscTargets NAMESPACE ${BLOSC_PACKAGE_NAMESPACE})
+
+        include(CMakePackageConfigHelpers)
+
+        set(BLOSC_INSTALL_CMAKE_PREFIX "lib/cmake")
+
+        set(BLOSC_CONFIG_FILE ${blosc_BINARY_DIR}/bloscConfig.cmake)
+        set(BLOSC_VERSION_FILE ${blosc_BINARY_DIR}/bloscConfigVersion.cmake)
+
+        configure_package_config_file(${blosc_SOURCE_DIR}/cmake/bloscConfig.cmake.in ${BLOSC_CONFIG_FILE}
+            INSTALL_DESTINATION ${BLOSC_INSTALL_CMAKE_PREFIX}
+        )
+
+        write_basic_package_version_file(${BLOSC_VERSION_FILE}
+            COMPATIBILITY SameMajorVersion
+            VERSION ${BLOSC_VERSION_MAJOR}.${BLOSC_VERSION_MINOR}.${BLOSC_VERSION_PATCH}
+        )
+
+        install(FILES ${BLOSC_CONFIG_FILE} ${BLOSC_VERSION_FILE}
+            DESTINATION ${BLOSC_INSTALL_CMAKE_PREFIX}
+            COMPONENT develop
+        )
+
+        include(GNUInstallDirs)
+        install(TARGETS blosc_shared
+            RUNTIME
+            DESTINATION ${CMAKE_INSTALL_BINDIR}
+            COMPONENT runtime
+            LIBRARY
+            DESTINATION ${CMAKE_INSTALL_LIBDIR}
+            COMPONENT runtime
+            NAMELINK_COMPONENT develop
+            ARCHIVE
+            DESTINATION ${CMAKE_INSTALL_LIBDIR}
+            COMPONENT develop
+        )
+
+        install(EXPORT bloscTargets
+            NAMESPACE ${BLOSC_PACKAGE_NAMESPACE}
+            DESTINATION ${BLOSC_INSTALL_CMAKE_PREFIX}
+        )
+
+        install_with_directory(FILES ${BLOSC_HDRS}
+            DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/blosc
+            COMPONENT develop
+            BASE_DIR ${blosc_SOURCE_DIR}
+        )
+
+        install_with_directory(FILES ${BLOSC_GENERATED_HEADERS}
+            DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/blosc
+            COMPONENT develop
+            BASE_DIR ${BLOSC_GENERATED_HEADER_DIR}
+        )
     endif(BUILD_SHARED)
     if(BUILD_STATIC)
         install(TARGETS blosc_static COMPONENT DEV)
